@@ -43,7 +43,7 @@
             <span>Sort</span>
             <select id="sortSelect">
               <option value="smart">Smart order</option>
-              <option value="priority">Priority</option>
+              <option value="priority">Priority: 1 first</option>
               <option value="costLow">Cost low to high</option>
               <option value="costHigh">Cost high to low</option>
               <option value="difficulty">Difficulty</option>
@@ -78,6 +78,18 @@
           <div class="filter-block">
             <div class="filter-head"><span>Status</span></div>
             <div class="pill-row" id="statusPills"></div>
+          </div>
+          <div class="filter-block">
+            <div class="filter-head"><span>Indoor/outdoor</span></div>
+            <div class="pill-row" id="environmentPills"></div>
+          </div>
+          <div class="filter-block">
+            <div class="filter-head"><span>Reservations</span></div>
+            <div class="pill-row" id="reservationPills"></div>
+          </div>
+          <div class="filter-block">
+            <div class="filter-head"><span>Layout</span></div>
+            <div class="pill-row" id="viewPills"></div>
           </div>
           <div class="filter-block">
             <div class="filter-head"><span>Trip fit</span></div>
@@ -129,11 +141,16 @@
         <label>Total estimate<input id="dayTotal" placeholder="¥4,000-5,000"></label>
         <label>Priority
           <select id="dayPriority">
-            <option value="1">1 - someday</option>
-            <option value="2">2 - normal</option>
-            <option value="3">3 - strong</option>
-            <option value="4">4 - must do</option>
-            <option value="5">5 - urgent window</option>
+            <option value="1">1 - highest</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+            <option value="9">9</option>
+            <option value="10">10 - lowest</option>
           </select>
         </label>
         <label>Difficulty
@@ -150,7 +167,15 @@
             <option value="fair-weather">Fair-weather</option>
           </select>
         </label>
+        <label>Indoor/outdoor
+          <select id="dayEnvironment">
+            <option value="indoor">Indoor</option>
+            <option value="outdoor">Outdoor</option>
+            <option value="mixed">Mixed</option>
+          </select>
+        </label>
         <label>Tickets / reservations<input id="dayReservation" placeholder="walk-up likely, book ahead..."></label>
+        <label class="check-label"><input id="dayReservationRequired" type="checkbox"> Reservation required</label>
         <label>Hours<input id="dayHours" placeholder="Verify official hours before leaving"></label>
         <label>Closed days / risk<input id="dayClosed" placeholder="Check closed days and last entry"></label>
       </div>
@@ -164,6 +189,7 @@
         <button type="button" class="btn small" data-action="add-stop">Add stop</button>
       </div>
       <div class="stops-editor" id="stopsEditor"></div>
+      <p class="form-help">Each stop can store opening hours and a maps link. Leave maps blank to auto-generate a Google Maps search link.</p>
       <div class="modal-actions split">
         <button type="button" class="btn danger" data-action="delete-day" id="deleteDayBtn">Delete</button>
         <div>

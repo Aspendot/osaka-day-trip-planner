@@ -32,6 +32,24 @@ const QUICK_FILTERS = [
   ["must", "Must-do"],
 ];
 
+const ENVIRONMENT_FILTERS = [
+  ["all", "All"],
+  ["indoor", "Indoor"],
+  ["outdoor", "Outdoor"],
+  ["mixed", "Mixed"],
+];
+
+const RESERVATION_FILTERS = [
+  ["all", "All"],
+  ["required", "Required"],
+  ["notRequired", "Not required"],
+];
+
+const VIEW_FILTERS = [
+  ["grouped", "By region"],
+  ["flat", "One list"],
+];
+
 const STATUS_FILTERS = [
   ["active", "Active"],
   ["all", "All"],
@@ -66,6 +84,9 @@ function defaultState() {
       zone: "all",
       tag: "all",
       status: "active",
+      environment: "all",
+      reservation: "all",
+      view: "grouped",
       quick: "all",
       sort: "smart",
     },
@@ -223,6 +244,9 @@ function renderFilterPills() {
   renderPills("#zonePills", zones.map((zone) => [zone, zone === "all" ? "All zones" : zone]), "zone");
   renderPills("#tagPills", tags.map((tag) => [tag, tag === "all" ? "All types" : `${TAG_ICONS[tag] || "◆"} ${titleCase(tag)}`]), "tag");
   renderPills("#statusPills", STATUS_FILTERS, "status");
+  renderPills("#environmentPills", ENVIRONMENT_FILTERS, "environment");
+  renderPills("#reservationPills", RESERVATION_FILTERS, "reservation");
+  renderPills("#viewPills", VIEW_FILTERS, "view");
   renderPills("#quickPills", QUICK_FILTERS, "quick");
 }
 
@@ -249,6 +273,8 @@ function normalizeDay(day) {
     : Array.from({ length: 12 }, (_, i) => i + 1);
   const zone = day.zone?.trim() || "Osaka";
   const duration = day.duration || durationFromSub(day.sub) || "Flexible day";
+  const environment = day.environment || inferEnvironment({ ...day, tags });
+  const reservationRequired = Boolean(day.reservationRequired ?? /book|reserve|advance|required|ticket|ferry|sell out/i.test(`${day.reservation || ""} ${day.note || ""} ${JSON.stringify(day.stops || [])}`));
   return {
     id: day.id || uid("day"),
     zone,
@@ -257,14 +283,16 @@ function normalizeDay(day) {
     duration,
     tags: tags.length ? tags : ["area"],
     months,
-    stops: Array.isArray(day.stops) ? day.stops : [],
+    stops: normalizeStops(Array.isArray(day.stops) ? day.stops : [], environment),
     transport: day.transport || "TBD",
     fees: day.fees || "TBD",
     total: day.total || "TBD",
     note: day.note || "",
-    priority: Number(day.priority || 2),
+    priority: normalizePriority(day.priority),
     difficulty: day.difficulty || inferDifficulty(day),
     rain: day.rain || inferRain(tags),
+    environment,
+    reservationRequired,
     reservation: day.reservation || inferReservation(day),
     hours: day.hours || "Verify official hours before leaving",
     closed: day.closed || "Check closed days and last entry",
@@ -273,7 +301,7 @@ function normalizeDay(day) {
 }
 
 function filteredDays(days) {
-  const { query, month, zone, tag, status, quick, sort } = state.filters;
+  const { query, month, zone, tag, status, environment, reservation, quick, sort } = state.filters;
   const q = query.trim().toLowerCase();
   let list = days.filter((day) => {
     if (status === "active" && state.completed[day.id]) return false;
@@ -282,6 +310,9 @@ function filteredDays(days) {
     if (status === "completed" && !state.completed[day.id]) return false;
     if (zone !== "all" && day.zone !== zone) return false;
     if (tag !== "all" && !(day.tags || []).includes(tag)) return false;
+    if (environment !== "all" && day.environment !== environment) return false;
+    if (reservation === "required" && !day.reservationRequired) return false;
+    if (reservation === "notRequired" && day.reservationRequired) return false;
     if (month !== "all") {
       const m = Number(month);
       const plannedForMonth = Number(state.planned[day.id]?.month) === m;
@@ -298,9 +329,9 @@ function matchesQuick(day, quick) {
   if (quick === "bestNow") return day.months.includes(NOW_MONTH) && !state.completed[day.id];
   if (quick === "rainy") return day.rain === "rain-friendly" || day.rain === "mixed";
   if (quick === "lowCost") return estimatedCost(day) <= 3500;
-  if (quick === "tickets") return /book|reserve|advance|verify|ticket|ferry|required/i.test(`${day.reservation} ${day.note} ${searchText(day)}`);
+  if (quick === "tickets") return day.reservationRequired || /book|reserve|advance|verify|ticket|ferry|required/i.test(`${day.reservation} ${day.note} ${searchText(day)}`);
   if (quick === "hikes") return day.tags.includes("hike");
-  if (quick === "must") return Number(day.priority) >= 4;
+  if (quick === "must") return Number(day.priority) <= 2;
   return true;
 }
 
@@ -312,7 +343,7 @@ function sortDays(days, sort) {
   const difficultyRank = { easy: 1, moderate: 2, hard: 3 };
 
   sorted.sort((a, b) => {
-    if (sort === "priority") return compare(doneRank(a), doneRank(b)) || compare(b.priority, a.priority) || compareTitles(a, b);
+    if (sort === "priority") return compare(doneRank(a), doneRank(b)) || compare(a.priority, b.priority) || compareTitles(a, b);
     if (sort === "costLow") return compare(estimatedCost(a), estimatedCost(b)) || compareTitles(a, b);
     if (sort === "costHigh") return compare(estimatedCost(b), estimatedCost(a)) || compareTitles(a, b);
     if (sort === "difficulty") return compare(difficultyRank[b.difficulty] || 0, difficultyRank[a.difficulty] || 0) || compareTitles(a, b);
@@ -321,7 +352,7 @@ function sortDays(days, sort) {
     return compare(doneRank(a), doneRank(b))
       || compare(plannedRank(b), plannedRank(a))
       || compare(bestNow(b), bestNow(a))
-      || compare(b.priority, a.priority)
+      || compare(a.priority, b.priority)
       || compare(estimatedCost(a), estimatedCost(b))
       || compareTitles(a, b);
   });
@@ -332,6 +363,11 @@ function renderCards(days) {
   const cards = $("#cards");
   if (!days.length) {
     cards.innerHTML = `<div class="empty-state"><div>No matching trips.<br>Clear filters or add a new day plan.</div></div>`;
+    return;
+  }
+
+  if (state.filters.view === "flat") {
+    cards.innerHTML = days.map(renderCard).join("");
     return;
   }
 
@@ -350,7 +386,7 @@ function renderCards(days) {
 function renderCard(day) {
   const planned = state.planned[day.id];
   const completed = state.completed[day.id];
-  const must = Number(day.priority) >= 4;
+  const must = Number(day.priority) <= 2;
   const stops = day.stops.slice(0, 6).map(renderStop).join("");
   const extraStops = day.stops.length > 6 ? `<div class="transit">+ ${day.stops.length - 6} more stops</div>` : "";
   const tripClass = ["trip-card", must ? "must" : "", completed ? "completed" : ""].filter(Boolean).join(" ");
@@ -366,13 +402,15 @@ function renderCard(day) {
           ${planned ? `<span class="status-chip planned">📅 ${MONTHS[planned.month]} ${planned.year}</span>` : ""}
           ${completed ? `<span class="status-chip done">★ done</span>` : ""}
           ${must ? `<span class="status-chip warn">priority ${day.priority}</span>` : ""}
+          ${day.reservationRequired ? `<span class="status-chip warn">reservation</span>` : ""}
         </div>
       </div>
-      <div class="trip-tags">${day.tags.map((tag) => `<span class="tag ${escapeAttr(tag)}">${TAG_ICONS[tag] || "◆"} ${escapeHtml(tag)}</span>`).join("")}</div>
+      <div class="trip-tags">${renderTagChips(day)}</div>
       <div class="trip-body">
         <div class="meta-grid">
           <span class="mini-chip">${difficultyLabel(day.difficulty)}</span>
           <span class="mini-chip">${rainLabel(day.rain)}</span>
+          <span class="mini-chip">${environmentLabel(day.environment)}</span>
           <span class="mini-chip">${escapeHtml(day.reservation)}</span>
         </div>
         <div class="stop-list">${stops}${extraStops}</div>
@@ -397,20 +435,30 @@ function renderCard(day) {
 }
 
 function renderStop(stop) {
+  const query = cleanMapQuery(stop.n || stop.d || "");
+  const maps = stop.maps || (query ? mapSearchUrl(query) : "");
+  const mapLink = maps ? `<a href="${escapeAttr(maps)}" target="_blank" rel="noreferrer">Map</a>` : "";
+  const hours = stop.hours ? `<div class="stop-hours">${escapeHtml(stop.hours)}</div>` : "";
   if (stop.transit || stop.t === "→") {
-    return `<div class="transit">↳ ${escapeHtml(stop.d || stop.n || "")}</div>`;
+    return `<div class="transit">↳ ${escapeHtml(stop.d || stop.n || "")} ${mapLink}</div>`;
   }
-  const mapLink = stop.n ? `<a href="${mapSearchUrl(stop.n)}" target="_blank" rel="noreferrer">Map</a>` : "";
   return `
     <div class="stop">
       <div class="stop-time">${escapeHtml(stop.t || "")}</div>
       <div>
         <div class="stop-name">${escapeHtml(stop.n || "")} ${mapLink}</div>
         ${stop.d ? `<div class="stop-note">${escapeHtml(stop.d)}</div>` : ""}
+        ${hours}
         ${stop.trail ? `<div class="trail">🥾 ${escapeHtml(stop.trail)}</div>` : ""}
       </div>
     </div>
   `;
+}
+
+function renderTagChips(day) {
+  const base = day.tags.map((tag) => `<span class="tag ${escapeAttr(tag)}">${TAG_ICONS[tag] || "◆"} ${escapeHtml(tag)}</span>`);
+  base.push(`<span class="tag ${escapeAttr(day.environment)}">${environmentLabel(day.environment)}</span>`);
+  return base.join("");
 }
 
 function renderMonthDots(day) {
@@ -463,9 +511,11 @@ function openDayDialog(id) {
     tags: ["area"],
     months: [NOW_MONTH],
     stops: [{ t: "9:00", n: "", d: "" }],
-    priority: 2,
+    priority: 5,
     difficulty: "easy",
     rain: "mixed",
+    environment: "mixed",
+    reservationRequired: false,
     source: "custom",
   });
   if (!day) return;
@@ -483,7 +533,9 @@ function openDayDialog(id) {
   $("#dayPriority").value = String(day.priority || 2);
   $("#dayDifficulty").value = day.difficulty || "easy";
   $("#dayRain").value = day.rain || "mixed";
+  $("#dayEnvironment").value = day.environment || "mixed";
   $("#dayReservation").value = day.reservation || "";
+  $("#dayReservationRequired").checked = Boolean(day.reservationRequired);
   $("#dayHours").value = day.hours || "";
   $("#dayClosed").value = day.closed || "";
   $("#dayNote").value = day.note || "";
@@ -517,6 +569,8 @@ function addStopRowFromStop(stop = {}) {
     <input data-field="t" placeholder="Time" value="${escapeAttr(stop.t || "")}">
     <input data-field="n" placeholder="Stop name" value="${escapeAttr(stop.n || "")}">
     <input data-field="d" placeholder="Details / transit" value="${escapeAttr(stop.d || "")}">
+    <input data-field="hours" placeholder="Hours / closed days" value="${escapeAttr(stop.hours || "")}">
+    <input data-field="maps" placeholder="Google Maps link" value="${escapeAttr(stop.maps || "")}">
     <button type="button" class="icon-btn" data-action="delete-stop" aria-label="Remove stop">×</button>
   `;
   $("#stopsEditor").append(row);
@@ -533,7 +587,9 @@ function saveDayFromForm(event) {
     const t = $('[data-field="t"]', row).value.trim();
     const n = $('[data-field="n"]', row).value.trim();
     const d = $('[data-field="d"]', row).value.trim();
-    return { t, n, d, transit: t === "→" && !n };
+    const hours = $('[data-field="hours"]', row).value.trim();
+    const maps = $('[data-field="maps"]', row).value.trim();
+    return { t, n, d, hours, maps, transit: t === "→" && !n };
   }).filter((stop) => stop.t || stop.n || stop.d);
 
   const day = normalizeDay({
@@ -551,6 +607,8 @@ function saveDayFromForm(event) {
     priority: Number($("#dayPriority").value),
     difficulty: $("#dayDifficulty").value,
     rain: $("#dayRain").value,
+    environment: $("#dayEnvironment").value,
+    reservationRequired: $("#dayReservationRequired").checked,
     reservation: $("#dayReservation").value.trim() || "walk-up likely",
     hours: $("#dayHours").value.trim() || "Verify official hours before leaving",
     closed: $("#dayClosed").value.trim() || "Check closed days and last entry",
@@ -659,7 +717,7 @@ function openDetail(id) {
   $("#detailBody").innerHTML = `
     <div class="detail-grid">
       <section>
-        <div class="trip-tags">${day.tags.map((tag) => `<span class="tag ${escapeAttr(tag)}">${TAG_ICONS[tag] || "◆"} ${escapeHtml(tag)}</span>`).join("")}</div>
+        <div class="trip-tags">${renderTagChips(day)}</div>
         <div class="detail-section">
           <h3>Route</h3>
           <div class="stop-list">${day.stops.map(renderStop).join("")}</div>
@@ -674,7 +732,9 @@ function openDetail(id) {
           ${plan ? `<span class="status-chip planned">📅 ${MONTHS[plan.month]} ${plan.year}</span>` : ""}
           <span class="mini-chip">${difficultyLabel(day.difficulty)}</span>
           <span class="mini-chip">${rainLabel(day.rain)}</span>
+          <span class="mini-chip">${environmentLabel(day.environment)}</span>
           <span class="mini-chip">Priority ${day.priority}</span>
+          ${day.reservationRequired ? `<span class="mini-chip">Reservation required</span>` : ""}
         </div>
         <div class="detail-section">
           <h3>Before leaving</h3>
@@ -688,6 +748,7 @@ function openDetail(id) {
             <div><span>Total</span><strong>${escapeHtml(day.total)}</strong></div>
           </div>
           <p class="note-line"><strong>Tickets:</strong> ${escapeHtml(day.reservation)}</p>
+          <p class="note-line"><strong>Reservation required:</strong> ${day.reservationRequired ? "Yes" : "No"}</p>
           <p class="note-line"><strong>Hours:</strong> ${escapeHtml(day.hours)}</p>
           <p class="note-line"><strong>Closed/risk:</strong> ${escapeHtml(day.closed)}</p>
         </div>
@@ -710,7 +771,7 @@ function prepList(day) {
     day.closed,
     "Bring IC card, cash for small temples/shops, battery pack, and offline map.",
   ];
-  if (/book|reserve|advance|required|ticket|ferry|verify/i.test(`${day.reservation} ${day.note}`)) {
+  if (day.reservationRequired || /book|reserve|advance|required|ticket|ferry|verify/i.test(`${day.reservation} ${day.note}`)) {
     items.push("Confirm booking, ticket release, ferry status, or reservation before committing.");
   }
   if (day.rain === "fair-weather") items.push("Check weather the night before and keep a rain-safe backup ready.");
@@ -749,7 +810,7 @@ function savePoi() {
   if (duplicate && !confirm(`"${poi.name}" may already exist as "${duplicate}". Save anyway?`)) return;
   const match = findZoneMatch(poi);
   if (match && confirm(`This looks like it could fit into "${match.title}". Add it as a stop there instead of saving as a loose POI?`)) {
-    match.stops.push({ t: "+", n: poi.name, d: [poi.type, poi.notes, poi.maps].filter(Boolean).join(" · ") });
+    match.stops.push({ t: "+", n: poi.name, d: [poi.type, poi.notes].filter(Boolean).join(" · "), maps: poi.maps, hours: "Check current hours before leaving." });
     persistDay(match);
     saveState();
     clearPoiForm();
@@ -819,7 +880,7 @@ function buildDayFromSelectedPois() {
   $("#dayDuration").value = "Flexible day";
   $("#dayTags").value = unique(pois.map((poi) => poi.type)).join(", ");
   $("#stopsEditor").innerHTML = "";
-  pois.forEach((poi) => addStopRowFromStop({ t: "", n: poi.name, d: [poi.type, poi.notes, poi.maps].filter(Boolean).join(" · ") }));
+  pois.forEach((poi) => addStopRowFromStop({ t: "", n: poi.name, d: [poi.type, poi.notes].filter(Boolean).join(" · "), maps: poi.maps, hours: "Check current hours before leaving." }));
 }
 
 function findZoneMatch(poi) {
@@ -914,10 +975,12 @@ function searchText(day) {
     day.priority,
     day.difficulty,
     day.rain,
+    day.environment,
+    day.reservationRequired ? "reservation required" : "no reservation required",
     day.reservation,
     day.hours,
     day.closed,
-    day.stops.map((stop) => `${stop.t} ${stop.n} ${stop.d} ${stop.trail || ""}`).join(" "),
+    day.stops.map((stop) => `${stop.t} ${stop.n} ${stop.d} ${stop.hours || ""} ${stop.maps || ""} ${stop.trail || ""}`).join(" "),
     day.months.map((month) => MONTHS[month]).join(" "),
   ].join(" ").toLowerCase();
 }
@@ -951,10 +1014,65 @@ function inferDifficulty(day) {
   return day.tags?.includes("hike") ? "moderate" : "easy";
 }
 
+function normalizePriority(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return 5;
+  if (n >= 1 && n <= 10) return Math.round(n);
+  return 5;
+}
+
+function normalizeStops(stops, fallbackEnvironment = "mixed") {
+  return stops.map((stop) => {
+    const base = { ...stop };
+    const text = `${base.t || ""} ${base.n || ""} ${base.d || ""}`.toLowerCase();
+    const environment = base.environment || inferStopEnvironment(text, fallbackEnvironment);
+    const hours = base.hours || inferStopHours(text, environment);
+    const maps = base.maps || "";
+    return {
+      ...base,
+      environment,
+      hours,
+      maps,
+      reservationRequired: Boolean(base.reservationRequired ?? /book|reserve|advance|required|ticket|ferry|weather-dependent|sell out/i.test(text)),
+    };
+  });
+}
+
 function inferRain(tags) {
   if (tags.some((tag) => ["museum", "exhibition", "onsen", "food", "train"].includes(tag))) return "rain-friendly";
   if (tags.some((tag) => ["hike", "beach", "coast", "nature"].includes(tag))) return "fair-weather";
   return "mixed";
+}
+
+function inferEnvironment(day) {
+  const tags = day.tags || [];
+  if (tags.some((tag) => ["hike", "beach", "coast", "nature"].includes(tag))) {
+    return tags.some((tag) => ["museum", "exhibition", "onsen", "food", "train"].includes(tag)) ? "mixed" : "outdoor";
+  }
+  if (tags.some((tag) => ["museum", "exhibition", "onsen", "food", "train"].includes(tag))) return "indoor";
+  return "mixed";
+}
+
+function inferStopEnvironment(text, fallback) {
+  if (/museum|gallery|aquarium|exhibition|lunch|breakfast|coffee|onsen|train|station|food|cafe|restaurant|shojin|soba|udon/.test(text)) return "indoor";
+  if (/hike|trail|park|beach|river|walk|castle|shrine|temple|observatory|summit|island|ferry|cycling|garden|coast|lake|forest|waterfall|valley/.test(text)) return "outdoor";
+  return fallback;
+}
+
+function inferStopHours(text, environment) {
+  if (/depart|return|station|train|bus|metro|hankyu|jr |nankai|kintetsu|sanyo|travel/.test(text)) return "Transit dependent; check current timetable.";
+  if (/lunch|breakfast|coffee|food|cafe|restaurant|soba|udon|seafood/.test(text)) return "Meal stop; check chosen restaurant hours.";
+  if (/ferry|weather-dependent/.test(text)) return "Timetable/weather dependent; confirm same day.";
+  if (/hike|trail|summit|cycling|walk from|loop|traverse|ridge/.test(text)) return "Outdoor route; go in daylight and verify trail/transport access.";
+  if (/beach|park|river|lake|coast|observatory|island|garden/.test(text)) return "Outdoor/public access varies; check daylight, weather, and local rules.";
+  if (/museum|gallery|aquarium|exhibition|castle|temple|shrine|onsen|village/.test(text)) return "Check official hours and last entry before leaving.";
+  return environment === "outdoor" ? "Outdoor stop; verify access before leaving." : "Check current hours before leaving.";
+}
+
+function environmentLabel(value) {
+  if (value === "indoor") return "Indoor";
+  if (value === "outdoor") return "Outdoor";
+  return "Indoor/outdoor";
 }
 
 function inferReservation(day) {
@@ -1001,11 +1119,11 @@ function normalizeText(value) {
 }
 
 function mapSearchUrl(query) {
-  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(query + " Japan")}`;
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(cleanMapQuery(query) + " Japan")}`;
 }
 
 function routeUrl(day) {
-  const stops = day.stops.filter((stop) => stop.n).map((stop) => stop.n);
+  const stops = day.stops.filter((stop) => stop.n).map((stop) => cleanMapQuery(stop.n));
   if (!stops.length) return mapSearchUrl(day.title);
   const destination = stops.at(-1);
   const waypoints = stops.slice(0, -1).slice(0, 8).join("|");
@@ -1017,6 +1135,18 @@ function routeUrl(day) {
   });
   if (waypoints) params.set("waypoints", waypoints);
   return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function cleanMapQuery(query = "") {
+  return String(query)
+    .replace(/^depart\s*(→|to|-)?\s*/i, "")
+    .replace(/^return\s*(from|to)?\s*/i, "")
+    .replace(/^arrive\s*/i, "")
+    .replace(/\([^)]*\)/g, "")
+    .replace(/\b(opt\.|optional|en route|all day)\b/gi, "")
+    .replace(/[·|]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function scrollToCards() {

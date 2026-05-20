@@ -166,15 +166,18 @@ function bindEvents() {
     }
     if (action === "clear-filters") clearFilters();
     if (action === "open-day") openDayDialog(id);
+    if (action === "close-day") closeDayDialog();
     if (action === "add-stop") addStopRow();
     if (action === "delete-stop") actionEl.closest(".stop-edit-row")?.remove();
     if (action === "delete-day") deleteEditingDay();
     if (action === "plan-day") openPlanDialog(id);
+    if (action === "close-plan") closePlanDialog();
     if (action === "toggle-done") toggleDone(id);
     if (action === "edit-day") openDayDialog(id);
     if (action === "open-detail") openDetail(id);
     if (action === "close-detail") $("#detailDialog").close();
     if (action === "open-poi") openPoiDialog();
+    if (action === "close-poi") closePoiDialog();
     if (action === "save-poi") savePoi();
     if (action === "clear-poi") clearPoiForm();
     if (action === "delete-poi") deletePoi(id);
@@ -490,6 +493,11 @@ function openDayDialog(id) {
   $("#dayDialog").showModal();
 }
 
+function closeDayDialog() {
+  editingDayId = null;
+  $("#dayDialog").close();
+}
+
 function renderMonthChecks(selected) {
   const selectedSet = new Set(selected.map(Number));
   $("#dayMonths").innerHTML = MONTHS.slice(1).map((month, index) => {
@@ -598,6 +606,11 @@ function openPlanDialog(id) {
   $("#planYear").value = current.year || NOW_YEAR;
   $("#planNote").value = current.note || "";
   $("#planDialog").showModal();
+}
+
+function closePlanDialog() {
+  planningDayId = null;
+  $("#planDialog").close();
 }
 
 function savePlanFromForm(event) {
@@ -711,6 +724,10 @@ function prepList(day) {
 function openPoiDialog() {
   renderPoiList();
   $("#poiDialog").showModal();
+}
+
+function closePoiDialog() {
+  $("#poiDialog").close();
 }
 
 function savePoi() {

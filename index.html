@@ -116,7 +116,7 @@
           <p class="eyebrow">Day plan</p>
           <h2 id="dayDialogTitle">Add day plan</h2>
         </div>
-        <button class="icon-btn" value="cancel" aria-label="Close">×</button>
+        <button type="button" class="icon-btn" data-action="close-day" aria-label="Close">×</button>
       </div>
       <input type="hidden" id="dayId">
       <div class="form-grid">
@@ -167,7 +167,7 @@
       <div class="modal-actions split">
         <button type="button" class="btn danger" data-action="delete-day" id="deleteDayBtn">Delete</button>
         <div>
-          <button class="btn" value="cancel">Cancel</button>
+          <button type="button" class="btn" data-action="close-day">Cancel</button>
           <button class="btn primary" value="default" type="submit">Save plan</button>
         </div>
       </div>
@@ -181,7 +181,7 @@
           <p class="eyebrow">Soft book</p>
           <h2 id="planTitle">Choose a date window</h2>
         </div>
-        <button class="icon-btn" value="cancel" aria-label="Close">×</button>
+        <button type="button" class="icon-btn" data-action="close-plan" aria-label="Close">×</button>
       </div>
       <div class="form-grid compact">
         <label>Month<select id="planMonth"></select></label>
@@ -189,7 +189,7 @@
       </div>
       <label class="full-label">Trip note<input id="planNote" placeholder="weekday, friends, ticket drop, weather trigger..."></label>
       <div class="modal-actions">
-        <button class="btn" value="cancel">Cancel</button>
+        <button type="button" class="btn" data-action="close-plan">Cancel</button>
         <button class="btn primary" value="default" type="submit">Soft book</button>
       </div>
     </form>
@@ -202,7 +202,7 @@
           <p class="eyebrow">Capture loose ideas</p>
           <h2>POI Bucket</h2>
         </div>
-        <button class="icon-btn" value="cancel" aria-label="Close">×</button>
+        <button type="button" class="icon-btn" data-action="close-poi" aria-label="Close">×</button>
       </div>
       <div class="poi-layout">
         <section>

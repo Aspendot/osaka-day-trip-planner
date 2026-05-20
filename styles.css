@@ -772,18 +772,33 @@ input:focus, select:focus, textarea:focus {
   z-index: 30;
   width: 54px;
   height: 54px;
-  display: inline-grid;
-  place-items: center;
+  display: block;
   padding: 0;
   border: 0;
   border-radius: 50%;
   background: var(--gold);
-  color: #15110a;
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1;
-  text-align: center;
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
   box-shadow: 0 12px 30px rgba(0, 0, 0, .35);
+}
+
+.fab::before,
+.fab::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 16px;
+  height: 4px;
+  border-radius: 999px;
+  background: #15110a;
+  transform: translate(-50%, -50%);
+}
+
+.fab::after {
+  width: 4px;
+  height: 16px;
 }
 
 .modal {

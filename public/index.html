@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Osaka Day Trip Planner</title>
+  <meta name="description" content="A practical Osaka and Kansai day-trip planner with seasonal filters, prep checklists, POIs, backups, and calendar planning.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Inter:wght@400;500;600;700;800&family=Shippori+Mincho:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="hero">
+      <div class="hero-image" aria-hidden="true"></div>
+      <div class="hero-content">
+        <p class="eyebrow">Kansai trip control room</p>
+        <h1>Osaka Day Trip Planner</h1>
+        <p class="hero-copy">Season-aware ideas, real prep checks, POI capture, soft booking, backups, and fast filtering for day trips you will actually take.</p>
+        <div class="hero-actions">
+          <button class="btn primary" data-action="quick" data-quick="bestNow">Best now</button>
+          <button class="btn" data-action="quick" data-quick="rainy">Rain-safe</button>
+          <button class="btn" data-action="open-poi">POI bucket</button>
+        </div>
+      </div>
+      <section class="hero-stats" aria-label="Trip stats">
+        <div><span id="stat-total">0</span><small>Total ideas</small></div>
+        <div><span id="stat-planned">0</span><small>Soft booked</small></div>
+        <div><span id="stat-done">0</span><small>Completed</small></div>
+        <div><span id="stat-left">0</span><small>Remaining</small></div>
+      </section>
+    </header>
+
+    <main>
+      <section class="toolbar" aria-label="Planner controls">
+        <div class="search-row">
+          <label class="search-box">
+            <span>Search</span>
+            <input id="searchInput" type="search" autocomplete="off" placeholder="place, station, hike, ticket, month...">
+          </label>
+          <label class="select-box">
+            <span>Sort</span>
+            <select id="sortSelect">
+              <option value="smart">Smart order</option>
+              <option value="priority">Priority</option>
+              <option value="costLow">Cost low to high</option>
+              <option value="costHigh">Cost high to low</option>
+              <option value="difficulty">Difficulty</option>
+              <option value="duration">Trip length</option>
+              <option value="zone">Zone</option>
+            </select>
+          </label>
+          <button class="btn primary" data-action="open-day">Add day</button>
+          <button class="btn" data-action="export">Export</button>
+          <label class="btn file-btn">
+            Import
+            <input id="importInput" type="file" accept="application/json,.json">
+          </label>
+        </div>
+
+        <div class="filter-block">
+          <div class="filter-head">
+            <span>Month</span>
+            <button class="text-btn" data-action="clear-filters">Clear filters</button>
+          </div>
+          <div class="pill-row" id="monthPills"></div>
+        </div>
+        <div class="filter-grid">
+          <div class="filter-block">
+            <div class="filter-head"><span>Zone</span></div>
+            <div class="pill-row" id="zonePills"></div>
+          </div>
+          <div class="filter-block">
+            <div class="filter-head"><span>Type</span></div>
+            <div class="pill-row" id="tagPills"></div>
+          </div>
+          <div class="filter-block">
+            <div class="filter-head"><span>Status</span></div>
+            <div class="pill-row" id="statusPills"></div>
+          </div>
+          <div class="filter-block">
+            <div class="filter-head"><span>Trip fit</span></div>
+            <div class="pill-row" id="quickPills"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="dashboard-band">
+        <div class="insight-panel">
+          <div class="panel-title">
+            <span>Suggested next trips</span>
+            <small id="resultText"></small>
+          </div>
+          <div class="recommendations" id="recommendations"></div>
+        </div>
+        <div class="timeline-panel">
+          <div class="panel-title">
+            <span>Soft-booked calendar</span>
+            <small id="calendarCount"></small>
+          </div>
+          <div class="timeline" id="timeline"></div>
+        </div>
+      </section>
+
+      <section class="cards" id="cards" aria-live="polite"></section>
+    </main>
+  </div>
+
+  <button class="fab" data-action="open-day" aria-label="Add day">+</button>
+
+  <dialog class="modal" id="dayDialog">
+    <form method="dialog" class="modal-panel wide" id="dayForm">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Day plan</p>
+          <h2 id="dayDialogTitle">Add day plan</h2>
+        </div>
+        <button class="icon-btn" value="cancel" aria-label="Close">×</button>
+      </div>
+      <input type="hidden" id="dayId">
+      <div class="form-grid">
+        <label>Title<input id="dayTitle" required placeholder="Namba walk and Dotonbori"></label>
+        <label>Zone<input id="dayZone" required placeholder="Osaka"></label>
+        <label>Duration<input id="dayDuration" placeholder="Full day"></label>
+        <label>Tags<input id="dayTags" placeholder="museum, temple, nature"></label>
+        <label>Transport estimate<input id="dayTransport" placeholder="¥1,200"></label>
+        <label>Entry estimate<input id="dayFees" placeholder="¥2,000"></label>
+        <label>Total estimate<input id="dayTotal" placeholder="¥4,000-5,000"></label>
+        <label>Priority
+          <select id="dayPriority">
+            <option value="1">1 - someday</option>
+            <option value="2">2 - normal</option>
+            <option value="3">3 - strong</option>
+            <option value="4">4 - must do</option>
+            <option value="5">5 - urgent window</option>
+          </select>
+        </label>
+        <label>Difficulty
+          <select id="dayDifficulty">
+            <option value="easy">Easy</option>
+            <option value="moderate">Moderate</option>
+            <option value="hard">Hard</option>
+          </select>
+        </label>
+        <label>Weather fit
+          <select id="dayRain">
+            <option value="rain-friendly">Rain-friendly</option>
+            <option value="mixed">Mixed</option>
+            <option value="fair-weather">Fair-weather</option>
+          </select>
+        </label>
+        <label>Tickets / reservations<input id="dayReservation" placeholder="walk-up likely, book ahead..."></label>
+        <label>Hours<input id="dayHours" placeholder="Verify official hours before leaving"></label>
+        <label>Closed days / risk<input id="dayClosed" placeholder="Check closed days and last entry"></label>
+      </div>
+      <fieldset>
+        <legend>Best months</legend>
+        <div class="month-checks" id="dayMonths"></div>
+      </fieldset>
+      <label class="full-label">Notes<textarea id="dayNote" rows="3" placeholder="Seasonal tips, links, why this matters..."></textarea></label>
+      <div class="stops-head">
+        <h3>Stops</h3>
+        <button type="button" class="btn small" data-action="add-stop">Add stop</button>
+      </div>
+      <div class="stops-editor" id="stopsEditor"></div>
+      <div class="modal-actions split">
+        <button type="button" class="btn danger" data-action="delete-day" id="deleteDayBtn">Delete</button>
+        <div>
+          <button class="btn" value="cancel">Cancel</button>
+          <button class="btn primary" value="default" type="submit">Save plan</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="planDialog">
+    <form method="dialog" class="modal-panel" id="planForm">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Soft book</p>
+          <h2 id="planTitle">Choose a date window</h2>
+        </div>
+        <button class="icon-btn" value="cancel" aria-label="Close">×</button>
+      </div>
+      <div class="form-grid compact">
+        <label>Month<select id="planMonth"></select></label>
+        <label>Year<select id="planYear"></select></label>
+      </div>
+      <label class="full-label">Trip note<input id="planNote" placeholder="weekday, friends, ticket drop, weather trigger..."></label>
+      <div class="modal-actions">
+        <button class="btn" value="cancel">Cancel</button>
+        <button class="btn primary" value="default" type="submit">Soft book</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="poiDialog">
+    <form method="dialog" class="modal-panel wide" id="poiForm">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Capture loose ideas</p>
+          <h2>POI Bucket</h2>
+        </div>
+        <button class="icon-btn" value="cancel" aria-label="Close">×</button>
+      </div>
+      <div class="poi-layout">
+        <section>
+          <div class="form-grid">
+            <label>Name<input id="poiName" placeholder="Kamigawa Gallery"></label>
+            <label>Type
+              <select id="poiType">
+                <option>museum</option><option>hike</option><option>temple</option><option>shrine</option>
+                <option>nature</option><option>food</option><option>onsen</option><option>area</option><option>attraction</option>
+              </select>
+            </label>
+            <label>Zone / area<input id="poiZone" placeholder="Osaka, Kyoto, Nara..."></label>
+            <label>Maps link<input id="poiMaps" placeholder="https://maps.google.com/..."></label>
+          </div>
+          <label class="full-label">Notes<textarea id="poiNotes" rows="3" placeholder="hours, entry fee, why you saved it..."></textarea></label>
+          <div class="modal-actions">
+            <button type="button" class="btn" data-action="clear-poi">Clear</button>
+            <button type="button" class="btn primary" data-action="save-poi">Save POI</button>
+          </div>
+        </section>
+        <section>
+          <div class="poi-list-head">
+            <span id="poiCount">Saved POIs</span>
+            <button type="button" class="btn small" data-action="build-from-pois" id="buildFromPoiBtn">Build day</button>
+          </div>
+          <div class="poi-list" id="poiList"></div>
+        </section>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="detailDialog">
+    <div class="modal-panel wide detail-panel">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow" id="detailMeta">Trip detail</p>
+          <h2 id="detailTitle"></h2>
+        </div>
+        <button class="icon-btn" data-action="close-detail" aria-label="Close">×</button>
+      </div>
+      <div id="detailBody"></div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
